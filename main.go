@@ -39,7 +39,7 @@ func tweetLicenseChange(t *anaconda.TwitterApi, c licenseChange) error {
 }
 
 func handleLicenseChange(ctx context.Context, g *github.Client, t *anaconda.TwitterApi, c licenseChange, errc chan error) {
-	if *c.Repo.StargazersCount > -1 {
+	if *c.Repo.StargazersCount > 100 {
 		fmt.Printf("%s (%d stars) %s %s", *c.Repo.FullName, *c.Repo.StargazersCount, *c.File.Status, *c.File.Filename)
 		if err := tweetLicenseChange(t, c); err != nil {
 			errc <- err
