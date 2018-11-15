@@ -128,8 +128,6 @@ func run(ctx context.Context, g *github.Client, t *anaconda.TwitterApi) {
 			}
 		}
 
-		fmt.Printf("remaining: %d\n", resp.Rate.Remaining)
-
 		for _, event := range events {
 			go handleEvent(ctx, g, event, r, errc)
 		}
