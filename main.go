@@ -20,7 +20,6 @@ type licenseChange struct {
 
 func tweetLicenseChange(t *anaconda.TwitterApi, c licenseChange) error {
 	msg := ""
-	fmt.Printf("%s\n", *c.File.Status)
 	switch *c.File.Status {
 	case "added":
 		msg = fmt.Sprintf("HEADS UP! Someone added a license to %s! %s", *c.Repo.FullName, *c.Repo.HTMLURL)
@@ -29,7 +28,6 @@ func tweetLicenseChange(t *anaconda.TwitterApi, c licenseChange) error {
 	case "deleted":
 		msg = fmt.Sprintf("HEADS UP! Someone deleted the license of %s! %s", *c.Repo.FullName, *c.Repo.HTMLURL)
 	}
-	fmt.Printf("%s\n", msg)
 	_, err := t.PostTweet(msg, url.Values{})
 	if err != nil {
 		return fmt.Errorf("can't post tweet: %v", err)
@@ -39,8 +37,8 @@ func tweetLicenseChange(t *anaconda.TwitterApi, c licenseChange) error {
 }
 
 func handleLicenseChange(ctx context.Context, g *github.Client, t *anaconda.TwitterApi, c licenseChange, errc chan error) {
+	fmt.Printf("%s (%d stars) %s %s", *c.Repo.FullName, *c.Repo.StargazersCount, *c.File.Status, *c.File.Filename)
 	if *c.Repo.StargazersCount > 100 {
-		fmt.Printf("%s (%d stars) %s %s", *c.Repo.FullName, *c.Repo.StargazersCount, *c.File.Status, *c.File.Filename)
 		if err := tweetLicenseChange(t, c); err != nil {
 			errc <- err
 			return
@@ -48,16 +46,16 @@ func handleLicenseChange(ctx context.Context, g *github.Client, t *anaconda.Twit
 	}
 }
 
-func checkCommitsForLicense(ctx context.Context, g *github.Client, r *github.Repository, commits []github.PushEventCommit) (*github.RepositoryCommit, *github.Repository, *github.CommitFile, error) {
+func checkCommitsForLicense(ctx context.Context, g *github.Client, r *github.Repository, commits []github.PushEventCommit) (*licenseChange, error) {
 	repo, _, err := g.Repositories.GetByID(ctx, *r.ID)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("can't get repository: %v", err)
+		return nil, fmt.Errorf("can't get repository: %v", err)
 	}
 
 	for _, c := range commits {
 		commit, _, err := g.Repositories.GetCommit(ctx, *repo.Owner.Login, *repo.Name, *c.SHA)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("can't get commit: %v", err)
+			return nil, fmt.Errorf("can't get commit: %v", err)
 		}
 		for _, f := range commit.Files {
 			matched := false
@@ -67,12 +65,12 @@ func checkCommitsForLicense(ctx context.Context, g *github.Client, r *github.Rep
 				}
 			}
 			if matched {
-				return commit, repo, &f, nil
+				return &licenseChange{Commit: commit, Repo: repo, File: &f}, nil
 			}
 		}
 	}
 
-	return nil, nil, nil, nil
+	return nil, nil
 }
 
 func handleEvent(ctx context.Context, g *github.Client, e *github.Event, r chan licenseChange, errc chan error) {
@@ -90,14 +88,14 @@ func handleEvent(ctx context.Context, g *github.Client, e *github.Event, r chan 
 		}
 
 		if *payload.Ref == "refs/heads/master" {
-			commit, repo, file, err := checkCommitsForLicense(ctx, g, e.Repo, payload.Commits)
+			change, err := checkCommitsForLicense(ctx, g, e.Repo, payload.Commits)
 			if err != nil {
 				errc <- fmt.Errorf("can't check commits for %s: %v", *e.Repo.Name, err)
 				return
 			}
 
-			if commit != nil {
-				r <- licenseChange{Repo: repo, Commit: commit, File: file}
+			if change != nil {
+				r <- *change
 			}
 		}
 	}
