@@ -38,11 +38,9 @@ func tweetLicenseChange(t *anaconda.TwitterApi, c licenseChange) error {
 
 func handleLicenseChange(ctx context.Context, g *github.Client, t *anaconda.TwitterApi, c licenseChange, errc chan error) {
 	fmt.Printf("%s (%d stars) %s %s", *c.Repo.FullName, *c.Repo.StargazersCount, *c.File.Status, *c.File.Filename)
-	if *c.Repo.StargazersCount > 100 {
-		if err := tweetLicenseChange(t, c); err != nil {
-			errc <- err
-			return
-		}
+	if err := tweetLicenseChange(t, c); err != nil {
+		errc <- err
+		return
 	}
 }
 
@@ -52,20 +50,22 @@ func checkCommitsForLicense(ctx context.Context, g *github.Client, r *github.Rep
 		return nil, fmt.Errorf("can't get repository: %v", err)
 	}
 
-	for _, c := range commits {
-		commit, _, err := g.Repositories.GetCommit(ctx, *repo.Owner.Login, *repo.Name, *c.SHA)
-		if err != nil {
-			return nil, fmt.Errorf("can't get commit: %v", err)
-		}
-		for _, f := range commit.Files {
-			matched := false
-			for _, n := range []string{"LICENSE", "COPYING", "LICENSE.md"} {
-				if n == *f.Filename {
-					matched = true
-				}
+	if *repo.StargazersCount > 100 {
+		for _, c := range commits {
+			commit, _, err := g.Repositories.GetCommit(ctx, *repo.Owner.Login, *repo.Name, *c.SHA)
+			if err != nil {
+				return nil, fmt.Errorf("can't get commit: %v", err)
 			}
-			if matched {
-				return &licenseChange{Commit: commit, Repo: repo, File: &f}, nil
+			for _, f := range commit.Files {
+				matched := false
+				for _, n := range []string{"LICENSE", "COPYING", "LICENSE.md"} {
+					if n == *f.Filename {
+						matched = true
+					}
+				}
+				if matched {
+					return &licenseChange{Commit: commit, Repo: repo, File: &f}, nil
+				}
 			}
 		}
 	}
